@@ -1,0 +1,30 @@
+# Garante que todo Pull Request esteja vinculado a uma Issue.
+# Aceita Issues do GitHub (ex.: "Fixes #1") ou itens do Azure Boards (ex.: "Fixes AB#1"),
+# escritos no título ou na descrição do PR.
+
+name: PR vinculado a uma Issue
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    name: Verificar vínculo com Issue
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Procurar referência a Issue
+        env:
+          TITULO: ${{ github.event.pull_request.title }}
+          CORPO: ${{ github.event.pull_request.body }}
+        run: |
+          TEXTO=$(printf '%s\n%s' "$TITULO" "$CORPO")
+          if echo "$TEXTO" | grep -qE '(AB)?#[0-9]+'; then
+            echo "PR vinculado a: $(echo "$TEXTO" | grep -oE '(AB)?#[0-9]+' | sort -u | tr '\n' ' ')"
+          else
+            echo "::error::O PR precisa citar uma Issue (ex.: Fixes #1) no título ou na descrição."
+            exit 1
+          fi

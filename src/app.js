@@ -49,6 +49,10 @@ app.get('/soma', (req, res) => {
   res.json({ resultado: a + b });
 });
 
+app.get('/sobre', (req, res) => {
+  res.json({ projeto: 'Seminário CI/CD', equipe: 'Lucca e equipe' });
+});
+
 app.get('/metrics', async (req, res) => {
   res.set('Content-Type', register.contentType);
   res.end(await register.metrics());
