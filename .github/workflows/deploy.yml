@@ -1,0 +1,100 @@
+# CD - Entrega Contínua
+# Roda automaticamente quando o workflow "CI" termina com sucesso na main
+# (ou seja: só faz deploy se os testes passaram e a imagem foi publicada).
+# Também pode ser disparado à mão, escolhendo o cliente.
+#
+# Ele entra no servidor via SSH e atualiza APENAS o container do cliente escolhido.
+
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      cliente:
+        description: Cliente que vai receber o deploy
+        type: choice
+        options: [cliente-a]
+        default: cliente-a
+
+permissions:
+  contents: read
+
+# Nunca roda dois deploys do mesmo cliente ao mesmo tempo
+concurrency:
+  group: deploy-${{ inputs.cliente || 'cliente-a' }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy via SSH
+    runs-on: ubuntu-24.04
+    # Só faz deploy se o CI passou (testes + build + push) e veio de um push
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    environment: producao
+    env:
+      CLIENTE: ${{ inputs.cliente || 'cliente-a' }}
+    steps:
+      - name: Baixar o código do commit que passou no CI
+        uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Descobrir a tag da imagem (SemVer + short hash)
+        id: versao
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short=7 HEAD)
+          echo "tag=$VERSION-$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Deploy de $CLIENTE com a imagem $VERSION-$SHORT_SHA"
+
+      - name: Configurar a chave SSH
+        env:
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ vars.SSH_HOST }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Atualizar o container do cliente no servidor
+        env:
+          SSH_HOST: ${{ vars.SSH_HOST }}
+          SSH_USER: ${{ vars.SSH_USER }}
+          TAG: ${{ steps.versao.outputs.tag }}
+          SHORT_SHA: ${{ steps.versao.outputs.short_sha }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "CLIENTE=$CLIENTE TAG=$TAG SHORT_SHA=$SHORT_SHA bash -s" <<'EOF'
+          set -euo pipefail
+          cd /opt/seminario/clientes/$CLIENTE
+          echo "Antes:  $(grep '^TAG=' .env)"
+          sed -i "s/^TAG=.*/TAG=$TAG/" .env
+          echo "Depois: $(grep '^TAG=' .env)"
+
+          # Baixa a imagem nova e recria só o container deste cliente
+          docker compose pull
+          docker compose up -d
+
+          # Confere se o container novo está respondendo com o commit certo
+          for i in $(seq 1 20); do
+            if docker compose exec -T app wget -qO- http://localhost:3000/ 2>/dev/null \
+                | grep -q "\"commit\":\"$SHORT_SHA\""; then
+              echo "Deploy OK: $CLIENTE rodando $TAG"
+              docker image prune -f > /dev/null
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "ERRO: o container não respondeu com a versão nova"
+          docker compose logs --tail 30
+          exit 1
+          EOF

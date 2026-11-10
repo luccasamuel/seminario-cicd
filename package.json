@@ -1,6 +1,6 @@
 {
   "name": "seminario-cicd",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Aplicação de exemplo para o seminário de CI/CD",
   "main": "src/server.js",
   "scripts": {
