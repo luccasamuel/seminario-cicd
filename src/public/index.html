@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Seminário CI/CD</title>
+<style>
+  :root {
+    --bg: #0b0f14;
+    --painel: #111821;
+    --borda: #1f2a36;
+    --texto: #e6edf3;
+    --suave: #8b98a5;
+    --verde: #3fd57a;
+    --verde-escuro: #0f3d24;
+    --ambar: #f5b942;
+    --vermelho: #ff6b6b;
+    --azul: #58a6ff;
+    --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 500px at 50% -10%, #12324a55, transparent 70%),
+      var(--bg);
+    color: var(--texto);
+    font-family: var(--sans);
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 28px 20px 40px; }
+
+  /* Topo */
+  .topo { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .marca { font-family: var(--mono); font-size: 14px; color: var(--suave); letter-spacing: .04em; }
+  .marca b { color: var(--texto); }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 6px 12px; border-radius: 999px;
+    border: 1px solid var(--borda); background: var(--painel);
+    font-family: var(--mono); font-size: 12px; color: var(--suave);
+  }
+  .ponto { width: 8px; height: 8px; border-radius: 50%; background: var(--verde); box-shadow: 0 0 0 0 var(--verde); animation: pulso 1.8s infinite; }
+  .status-reconectando .ponto { background: var(--ambar); animation-duration: .6s; }
+  .status-offline .ponto { background: var(--vermelho); animation: none; }
+  @keyframes pulso { 0% { box-shadow: 0 0 0 0 #3fd57a88; } 70% { box-shadow: 0 0 0 8px #3fd57a00; } 100% { box-shadow: 0 0 0 0 #3fd57a00; } }
+
+  /* Destaque da versão */
+  .hero { margin: 44px 0 36px; text-align: center; }
+  .rotulo { font-family: var(--mono); font-size: 12px; letter-spacing: .18em; color: var(--suave); text-transform: uppercase; }
+  .versao {
+    font-family: var(--mono); font-weight: 700;
+    font-size: clamp(64px, 14vw, 132px); line-height: 1; margin: 14px 0 18px;
+    background: linear-gradient(180deg, #ffffff, #9fb3c8);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    transition: transform .3s;
+  }
+  .versao.nova { animation: brilho 1.6s ease-out; }
+  @keyframes brilho {
+    0% { transform: scale(1.12); filter: drop-shadow(0 0 24px var(--verde)); }
+    100% { transform: scale(1); filter: drop-shadow(0 0 0 transparent); }
+  }
+  .meta { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+  .chip {
+    font-family: var(--mono); font-size: 14px;
+    padding: 8px 14px; border-radius: 8px;
+    background: var(--painel); border: 1px solid var(--borda); color: var(--texto);
+    text-decoration: none;
+  }
+  .chip span { color: var(--suave); margin-right: 6px; }
+  a.chip:hover { border-color: var(--azul); }
+
+  /* Pipeline */
+  .cartao { background: var(--painel); border: 1px solid var(--borda); border-radius: 14px; padding: 22px; }
+  .cartao h2 { margin: 0 0 18px; font-size: 13px; font-family: var(--mono); letter-spacing: .14em; color: var(--suave); text-transform: uppercase; font-weight: 600; }
+  .pipeline { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0; position: relative; }
+  .etapa { text-align: center; position: relative; padding: 0 4px; }
+  .etapa::before {
+    content: ""; position: absolute; top: 21px; left: -50%; width: 100%; height: 2px;
+    background: linear-gradient(90deg, var(--verde-escuro), var(--verde), var(--verde-escuro));
+    background-size: 200% 100%; animation: fluxo 2.4s linear infinite;
+  }
+  .etapa:first-child::before { display: none; }
+  @keyframes fluxo { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+  .no {
+    position: relative; z-index: 1;
+    width: 44px; height: 44px; margin: 0 auto 10px; border-radius: 50%;
+    display: grid; place-items: center;
+    background: var(--verde-escuro); border: 2px solid var(--verde); color: var(--verde);
+    font-weight: 700; font-family: var(--mono);
+  }
+  .etapa b { display: block; font-size: 13px; }
+  .etapa small { display: block; font-size: 11px; color: var(--suave); margin-top: 3px; font-family: var(--mono); }
+
+  /* Grade inferior */
+  .grade { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-top: 16px; }
+  .historico { list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: 13px; }
+  .historico li { display: flex; gap: 12px; align-items: center; padding: 9px 0; border-bottom: 1px dashed var(--borda); }
+  .historico li:last-child { border-bottom: 0; }
+  .historico .hora { color: var(--suave); }
+  .historico .tag { color: var(--verde); }
+  .historico .evento { color: var(--suave); margin-left: auto; font-size: 12px; }
+  .stack { display: flex; flex-wrap: wrap; gap: 8px; }
+  .stack span { font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--borda); color: var(--suave); }
+  .links { display: flex; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
+  .links a { color: var(--azul); font-family: var(--mono); font-size: 13px; text-decoration: none; }
+  .links a:hover { text-decoration: underline; }
+
+  /* Aviso de nova versão */
+  .aviso {
+    position: fixed; left: 50%; top: 18px; transform: translate(-50%, calc(-100% - 60px));
+    visibility: hidden;
+    background: var(--verde); color: #04140b; font-weight: 700;
+    padding: 14px 22px; border-radius: 12px; font-size: 16px;
+    box-shadow: 0 12px 40px #3fd57a55; transition: transform .45s cubic-bezier(.2,.9,.3,1.2);
+    z-index: 10; max-width: calc(100% - 32px); text-align: center;
+  }
+  .aviso.mostrar { transform: translate(-50%, 0); visibility: visible; }
+  .confete { position: fixed; top: -12px; width: 8px; height: 14px; border-radius: 2px; z-index: 9; animation: cair linear forwards; }
+  @keyframes cair { to { transform: translateY(105vh) rotate(720deg); opacity: .2; } }
+
+  @media (max-width: 760px) {
+    .pipeline { grid-template-columns: 1fr; gap: 14px; }
+    .etapa { display: grid; grid-template-columns: 44px 1fr; gap: 12px; align-items: center; text-align: left; }
+    .etapa::before { top: -14px; left: 21px; width: 2px; height: 14px; }
+    .no { margin: 0; }
+    .grade { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+
+<div class="wrap">
+  <header class="topo">
+    <div class="marca"><b>seminario-cicd</b> / produção</div>
+    <div class="pills">
+      <span class="pill" id="status"><i class="ponto"></i><span id="status-texto">ao vivo · atualiza a cada 3s</span></span>
+      <span class="pill" id="cliente">cliente: …</span>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="rotulo">Versão em produção</div>
+    <div class="versao" id="versao">v…</div>
+    <div class="meta">
+      <a class="chip" id="commit" target="_blank" rel="noopener"><span>commit</span><b id="commit-texto">…</b> ↗</a>
+      <span class="chip"><span>no ar há</span><b id="uptime">…</b></span>
+    </div>
+  </section>
+
+  <section class="cartao">
+    <h2>Como esta versão chegou aqui</h2>
+    <div class="pipeline">
+      <div class="etapa"><div class="no">1</div><div><b>Issue</b><small>tarefa</small></div></div>
+      <div class="etapa"><div class="no">2</div><div><b>Pull Request</b><small>Fixes #n</small></div></div>
+      <div class="etapa"><div class="no">3</div><div><b>Testes</b><small>jest</small></div></div>
+      <div class="etapa"><div class="no">4</div><div><b>Build</b><small>docker</small></div></div>
+      <div class="etapa"><div class="no">5</div><div><b>Push</b><small>docker hub</small></div></div>
+      <div class="etapa"><div class="no">6</div><div><b>Deploy</b><small>ssh</small></div></div>
+      <div class="etapa"><div class="no">✓</div><div><b>Produção</b><small>nginx + https</small></div></div>
+    </div>
+  </section>
+
+  <div class="grade">
+    <section class="cartao">
+      <h2>Linha do tempo desta tela</h2>
+      <ul class="historico" id="historico"></ul>
+    </section>
+    <section class="cartao">
+      <h2>Stack</h2>
+      <div class="stack">
+        <span>GitHub Actions</span><span>Docker</span><span>Docker Hub</span><span>SemVer + short hash</span>
+        <span>nginx-proxy</span><span>Let's Encrypt</span><span>Prometheus</span><span>Dozzle</span><span>Azure VM</span>
+      </div>
+      <div class="links">
+        <a href="/sobre">/sobre</a><a href="/health">/health</a><a href="/metrics">/metrics</a>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+  const el = (id) => document.getElementById(id);
+  let atual = null;
+  let iniciadoEm = null;
+  let falhas = 0;
+
+  function hora() {
+    return new Date().toLocaleTimeString('pt-BR');
+  }
+
+  function registrar(tag, evento) {
+    const li = document.createElement('li');
+    const h = document.createElement('span'); h.className = 'hora'; h.textContent = hora();
+    const t = document.createElement('span'); t.className = 'tag'; t.textContent = tag;
+    const e = document.createElement('span'); e.className = 'evento'; e.textContent = evento;
+    li.append(h, t, e);
+    el('historico').prepend(li);
+    while (el('historico').children.length > 6) el('historico').lastChild.remove();
+  }
+
+  function status(classe, texto) {
+    el('status').className = 'pill ' + classe;
+    el('status-texto').textContent = texto;
+  }
+
+  function comemorar(de, para) {
+    const aviso = el('aviso');
+    aviso.textContent = '🚀 Nova versão no ar: ' + de + ' → ' + para;
+    aviso.classList.add('mostrar');
+    setTimeout(() => aviso.classList.remove('mostrar'), 6000);
+
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const cores = ['#3fd57a', '#58a6ff', '#f5b942', '#ff7ab6', '#ffffff'];
+    for (let i = 0; i < 90; i++) {
+      const c = document.createElement('div');
+      c.className = 'confete';
+      c.style.left = Math.random() * 100 + 'vw';
+      c.style.background = cores[i % cores.length];
+      c.style.animationDuration = 1.8 + Math.random() * 1.6 + 's';
+      c.style.animationDelay = Math.random() * 0.4 + 's';
+      document.body.appendChild(c);
+      setTimeout(() => c.remove(), 4000);
+    }
+  }
+
+  function mostrar(info) {
+    const tag = 'v' + info.versao + '-' + info.commit;
+    el('versao').textContent = 'v' + info.versao;
+    el('commit-texto').textContent = info.commit;
+    el('commit').href = info.commit === 'local' ? info.repositorio : info.repositorio + '/commit/' + info.commit;
+    el('cliente').textContent = 'cliente: ' + info.cliente;
+    iniciadoEm = new Date(info.iniciadoEm);
+
+    if (atual === null) {
+      registrar(tag, 'em produção');
+    } else if (atual.tag !== tag) {
+      registrar(tag, 'deploy concluído');
+      el('versao').classList.remove('nova'); void el('versao').offsetWidth; el('versao').classList.add('nova');
+      comemorar('v' + atual.versao, 'v' + info.versao);
+    }
+    atual = { tag, versao: info.versao };
+  }
+
+  async function verificar() {
+    try {
+      const r = await fetch('/', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const info = await r.json();
+      if (falhas > 0) registrar('—', 'container voltou');
+      falhas = 0;
+      status('', 'ao vivo · atualiza a cada 3s');
+      mostrar(info);
+    } catch (e) {
+      falhas++;
+      if (falhas === 1) registrar('—', 'container sendo trocado…');
+      status(falhas < 10 ? 'status-reconectando' : 'status-offline',
+             falhas < 10 ? 'reconectando…' : 'fora do ar');
+    }
+  }
+
+  function relogio() {
+    if (!iniciadoEm) return;
+    const s = Math.max(0, Math.floor((Date.now() - iniciadoEm) / 1000));
+    const p = (n) => String(n).padStart(2, '0');
+    const d = Math.floor(s / 86400);
+    el('uptime').textContent = (d ? d + 'd ' : '') + p(Math.floor(s / 3600) % 24) + ':' + p(Math.floor(s / 60) % 60) + ':' + p(s % 60);
+  }
+
+  verificar();
+  setInterval(verificar, 3000);
+  setInterval(relogio, 1000);
+</script>
+</body>
+</html>

@@ -9,6 +9,12 @@ describe('API do Seminário CI/CD', () => {
     expect(res.body.versao).toBeDefined();
   });
 
+  test('GET / no navegador retorna o painel visual', async () => {
+    const res = await request(app).get('/').set('Accept', 'text/html');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('<title>Seminário CI/CD</title>');
+  });
+
   test('GET /health retorna ok', async () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);

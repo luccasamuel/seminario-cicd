@@ -1,7 +1,10 @@
 # CD - Entrega Contínua
 # Roda automaticamente quando o workflow "CI" termina com sucesso na main
 # (ou seja: só faz deploy se os testes passaram e a imagem foi publicada).
-# Também pode ser disparado à mão, escolhendo o cliente.
+#
+# Também pode ser disparado à mão (aba Actions → Deploy → Run workflow):
+#   - escolhendo o cliente
+#   - opcionalmente informando uma tag antiga → ROLLBACK em um clique
 #
 # Ele entra no servidor via SSH e atualiza APENAS o container do cliente escolhido.
 
@@ -19,6 +22,10 @@ on:
         type: choice
         options: [cliente-a]
         default: cliente-a
+      tag:
+        description: "Rollback: tag de uma versão anterior (ex.: 1.2.0-7d9e8a8). Deixe vazio para a versão atual da main."
+        type: string
+        required: false
 
 permissions:
   contents: read
@@ -48,12 +55,24 @@ jobs:
 
       - name: Descobrir a tag da imagem (SemVer + short hash)
         id: versao
+        env:
+          TAG_ROLLBACK: ${{ inputs.tag }}
         run: |
-          VERSION=$(node -p "require('./package.json').version")
-          SHORT_SHA=$(git rev-parse --short=7 HEAD)
-          echo "tag=$VERSION-$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          echo "Deploy de $CLIENTE com a imagem $VERSION-$SHORT_SHA"
+          if [ -n "$TAG_ROLLBACK" ]; then
+            if ! echo "$TAG_ROLLBACK" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-[0-9a-f]{7}$'; then
+              echo "::error::Tag inválida. Use o formato 1.2.0-7d9e8a8"
+              exit 1
+            fi
+            TAG="$TAG_ROLLBACK"
+            TIPO="Rollback"
+          else
+            TAG="$(node -p "require('./package.json').version")-$(git rev-parse --short=7 HEAD)"
+            TIPO="Deploy"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${TAG##*-}" >> "$GITHUB_OUTPUT"
+          echo "tipo=$TIPO" >> "$GITHUB_OUTPUT"
+          echo "$TIPO de $CLIENTE com a imagem $TAG"
 
       - name: Configurar a chave SSH
         env:
@@ -66,12 +85,18 @@ jobs:
           ssh-keyscan -H "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Atualizar o container do cliente no servidor
+        id: remoto
         env:
           SSH_HOST: ${{ vars.SSH_HOST }}
           SSH_USER: ${{ vars.SSH_USER }}
           TAG: ${{ steps.versao.outputs.tag }}
           SHORT_SHA: ${{ steps.versao.outputs.short_sha }}
         run: |
+          ANTERIOR=$(ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
+            "grep '^TAG=' /opt/seminario/clientes/$CLIENTE/.env | cut -d= -f2")
+          echo "anterior=$ANTERIOR" >> "$GITHUB_OUTPUT"
+          INICIO=$(date +%s)
+
           ssh -i ~/.ssh/id_deploy "$SSH_USER@$SSH_HOST" \
             "CLIENTE=$CLIENTE TAG=$TAG SHORT_SHA=$SHORT_SHA bash -s" <<'EOF'
           set -euo pipefail
@@ -80,7 +105,7 @@ jobs:
           sed -i "s/^TAG=.*/TAG=$TAG/" .env
           echo "Depois: $(grep '^TAG=' .env)"
 
-          # Baixa a imagem nova e recria só o container deste cliente
+          # Baixa a imagem e recria só o container deste cliente
           docker compose pull
           docker compose up -d
 
@@ -88,13 +113,44 @@ jobs:
           for i in $(seq 1 20); do
             if docker compose exec -T app wget -qO- http://localhost:3000/ 2>/dev/null \
                 | grep -q "\"commit\":\"$SHORT_SHA\""; then
-              echo "Deploy OK: $CLIENTE rodando $TAG"
+              echo "OK: $CLIENTE rodando $TAG"
               docker image prune -f > /dev/null
               exit 0
             fi
             sleep 3
           done
-          echo "ERRO: o container não respondeu com a versão nova"
+          echo "ERRO: o container não respondeu com a versão esperada"
           docker compose logs --tail 30
           exit 1
           EOF
+
+          echo "duracao=$(( $(date +%s) - INICIO ))s" >> "$GITHUB_OUTPUT"
+
+      - name: Resumo
+        if: always()
+        env:
+          TIPO: ${{ steps.versao.outputs.tipo }}
+          TAG: ${{ steps.versao.outputs.tag }}
+          ANTERIOR: ${{ steps.remoto.outputs.anterior }}
+          DURACAO: ${{ steps.remoto.outputs.duracao }}
+          STATUS: ${{ job.status }}
+          SHA: ${{ steps.versao.outputs.short_sha }}
+          REPO: ${{ github.server_url }}/${{ github.repository }}
+          IMAGEM: ${{ vars.DOCKERHUB_USERNAME }}/seminario-cicd
+        run: |
+          if [ "$STATUS" = "success" ]; then ICONE="✅"; else ICONE="❌"; fi
+          {
+            echo "## $ICONE ${TIPO:-Deploy} — $CLIENTE"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Cliente** | \`$CLIENTE\` |"
+            echo "| **Versão anterior** | \`${ANTERIOR:-?}\` |"
+            echo "| **Versão nova** | \`$TAG\` |"
+            echo "| **Commit** | [\`$SHA\`]($REPO/commit/$SHA) |"
+            echo "| **Imagem** | [\`$IMAGEM:$TAG\`](https://hub.docker.com/r/$IMAGEM/tags) |"
+            echo "| **Tempo de deploy** | ${DURACAO:-—} |"
+            echo "| **Status** | $STATUS |"
+            echo ""
+            echo "Para voltar à versão anterior: **Actions → Deploy → Run workflow**, tag \`${ANTERIOR:-?}\`."
+          } >> "$GITHUB_STEP_SUMMARY"
