@@ -59,7 +59,7 @@ app.get('/soma', (req, res) => {
 });
 
 app.get('/sobre', (req, res) => {
-  res.json({ projeto: 'Seminário CI/CD', equipe: 'Lucca e equipe' });
+  res.json({ projeto: 'Seminário CI/CD', equipe: 'Lucca, Ketlen, Enio e Leonardo' });
 });
 
 app.get('/metrics', async (req, res) => {
