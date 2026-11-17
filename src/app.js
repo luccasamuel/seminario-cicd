@@ -5,14 +5,12 @@ const { version } = require('../package.json');
 
 const app = express();
 
-// Informações da versão: SemVer do package.json + short hash do commit (injetado no build)
 const APP_VERSION = process.env.APP_VERSION || version;
 const GIT_COMMIT = process.env.GIT_COMMIT || 'local';
 const CLIENTE = process.env.CLIENTE || 'cliente-demo';
 const REPOSITORIO = process.env.REPOSITORIO || 'https://github.com/luccasamuel/seminario-cicd';
 const INICIADO_EM = new Date().toISOString();
 
-// Métricas para o Prometheus
 const register = new client.Registry();
 client.collectDefaultMetrics({ register });
 
@@ -30,7 +28,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Navegador recebe o painel visual; o pipeline, os testes e o curl recebem JSON
 app.get('/', (req, res) => {
   if (req.accepts(['json', 'html']) === 'html') {
     return res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -61,7 +58,6 @@ app.get('/soma', (req, res) => {
 app.get('/sobre', (req, res) => {
   const sobre = { projeto: 'Seminário CI/CD', equipe: 'Lucca, Ketlen, Enio e Leonardo' };
 
-  // Navegador recebe a página visual; testes e scripts recebem JSON
   if (req.accepts(['json', 'html']) === 'html') {
     return res.sendFile(path.join(__dirname, 'public', 'sobre.html'));
   }
