@@ -36,6 +36,13 @@ describe('API do Seminário CI/CD', () => {
     const res = await request(app).get('/sobre');
     expect(res.status).toBe(200);
     expect(res.body.projeto).toBe('Seminário CI/CD');
+    expect(res.body.membros.length).toBeGreaterThan(0);
+  });
+
+  test('GET /sobre no navegador retorna a página da equipe', async () => {
+    const res = await request(app).get('/sobre').set('Accept', 'text/html');
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('<title>Sobre · Seminário CI/CD</title>');
   });
 
   test('GET /metrics expõe métricas para o Prometheus', async () => {

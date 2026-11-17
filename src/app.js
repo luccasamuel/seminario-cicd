@@ -59,7 +59,14 @@ app.get('/soma', (req, res) => {
 });
 
 app.get('/sobre', (req, res) => {
-  res.json({ projeto: 'Seminário CI/CD', equipe: 'Lucca, Ketlen, Enio e Leonardo' });
+  const sobre = { projeto: 'Seminário CI/CD', equipe: 'Lucca, Ketlen, Enio e Leonardo' };
+
+  // Navegador recebe a página visual; testes e scripts recebem JSON
+  if (req.accepts(['json', 'html']) === 'html') {
+    return res.sendFile(path.join(__dirname, 'public', 'sobre.html'));
+  }
+  const membros = sobre.equipe.split(/\s*,\s*|\s+e\s+/).filter(Boolean);
+  res.json({ ...sobre, membros });
 });
 
 app.get('/metrics', async (req, res) => {
